@@ -1,0 +1,40 @@
+name: Build APK
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extrair projeto
+        run: unzip -q bedrock-servers-free.zip
+      - name: Baixar PHP e PocketMine
+        working-directory: anvilcel-standalone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ROOT="$PWD"
+          mkdir -p /tmp/php app/src/main/jniLibs/arm64-v8a app/src/main/assets
+          cd /tmp/php
+          OK=0
+          for V in 8.4 8.3 8.2; do
+            if gh release download "pm5-php-$V-latest" -R pmmp/PHP-Binaries -p 'PHP-*Android-arm64-PM5.tar.gz' -O php.tar.gz; then OK=1; break; fi
+          done
+          [ "$OK" = 1 ] || { echo "Nao consegui baixar o PHP"; exit 1; }
+          tar -xzf php.tar.gz
+          cp "$(find . -type f -name php | head -n1)" "$ROOT/app/src/main/jniLibs/arm64-v8a/libphp.so"
+          curl -fL https://github.com/pmmp/PocketMine-MP/releases/latest/download/PocketMine-MP.phar -o "$ROOT/app/src/main/assets/PocketMine-MP.phar"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.7
+      - name: Compilar
+        working-directory: anvilcel-standalone
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BedrockServersFree-apk
+          path: anvilcel-standalone/app/build/outputs/apk/debug/app-debug.apk
